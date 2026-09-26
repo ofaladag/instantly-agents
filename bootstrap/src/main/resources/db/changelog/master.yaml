@@ -1,0 +1,7 @@
+databaseChangeLog:
+  - changeSet:
+      id: 001-agent-runtime
+      author: instantly
+      changes:
+        - sqlFile:
+            path: db/changelog/001-agent-runtime.sql
