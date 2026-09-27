@@ -2,7 +2,6 @@ package com.ofaladag.instantly.agents;
 
 import static org.assertj.core.api.Assertions.*;
 
-import com.ofaladag.instantly.agents.adapter.out.crypto.StorageCipher;
 import com.ofaladag.instantly.agents.adapter.out.persistence.JdbcAgentStore;
 import com.ofaladag.instantly.agents.domain.Chat;
 
@@ -41,12 +40,7 @@ class PersistenceIntegrationTest {
     @BeforeEach
     void setup() {
         jdbc.execute("TRUNCATE agent.agent_account CASCADE");
-        store =
-                new JdbcAgentStore(
-                        jdbc,
-                        new TransactionTemplate(transactions),
-                        new StorageCipher(Base64.getEncoder().encodeToString(new byte[32])),
-                        8);
+        store = new JdbcAgentStore(jdbc, new TransactionTemplate(transactions), 8);
         store.bind("aylin-izmir", UUID.randomUUID(), "http://localhost:8080");
     }
 
@@ -65,7 +59,7 @@ class PersistenceIntegrationTest {
         assertThat(
                         jdbc.queryForObject(
                                 "SELECT count(*) FROM databasechangelog WHERE"
-                                    + " id='001-agent-runtime'",
+                                        + " id='001-agent-runtime'",
                                 Long.class))
                 .isEqualTo(1);
         var input = incoming(UUID.randomUUID(), 1);
@@ -79,11 +73,10 @@ class PersistenceIntegrationTest {
         assertThat(store.context(job).messages())
                 .extracting(Chat.Message::text)
                 .containsExactly(input.text());
-        assertThat(
-                        jdbc.queryForObject(
-                                "SELECT encode(content,'escape') FROM agent.chat_message",
-                                String.class))
-                .doesNotContain(input.text());
+        assertThat(jdbc.queryForObject("SELECT content FROM agent.chat_message", String.class))
+                .isEqualTo(input.text());
+        assertThat(jdbc.queryForObject("SELECT wire_payload FROM agent.chat_message", String.class))
+                .isEqualTo(input.wirePayload());
     }
 
     @Test
@@ -106,6 +99,18 @@ class PersistenceIntegrationTest {
         var old = store.claim(Set.of("aylin-izmir")).orElseThrow();
         store.saveReply(old, "persisted reply");
         store.saveFrame(old, "persisted frame");
+        assertThat(
+                        jdbc.queryForObject(
+                                "SELECT reply FROM agent.reply_job WHERE id=?",
+                                String.class,
+                                old.id()))
+                .isEqualTo("persisted reply");
+        assertThat(
+                        jdbc.queryForObject(
+                                "SELECT outbound_frame FROM agent.reply_job WHERE id=?",
+                                String.class,
+                                old.id()))
+                .isEqualTo("persisted frame");
         assertThat(store.claim(Set.of("aylin-izmir"))).isEmpty();
         jdbc.update(
                 "UPDATE agent.reply_job SET lease_until=now()-interval '1 second' WHERE id=?",
@@ -118,6 +123,11 @@ class PersistenceIntegrationTest {
         assertThatThrownBy(() -> store.saveFrame(old, "stale write"))
                 .isInstanceOf(Chat.LeaseLost.class);
         store.complete(recovered, UUID.randomUUID(), recovered.reply());
+        assertThat(
+                        jdbc.queryForObject(
+                                "SELECT content FROM agent.chat_message WHERE direction='OUT'",
+                                String.class))
+                .isEqualTo(recovered.reply());
         var next = store.claim(Set.of("aylin-izmir")).orElseThrow();
         assertThat(next.position()).isEqualTo(3);
         assertThat(store.context(next).messages())
@@ -126,6 +136,8 @@ class PersistenceIntegrationTest {
         store.summarize(next, "summary", 1);
         assertThat(store.context(next).messages()).hasSize(1);
         assertThat(store.context(next).summary()).isEqualTo("summary");
+        assertThat(jdbc.queryForObject("SELECT summary FROM agent.conversation", String.class))
+                .isEqualTo("summary");
     }
 
     @Test

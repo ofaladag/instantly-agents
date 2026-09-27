@@ -62,11 +62,12 @@ To activate selected characters:
    and fill in real provisioned credentials. Each entry maps a unique character ID
    to a unique account. Include only accounts you intend to activate; the catalog
    does not automatically create or activate all 50 accounts.
-3. Generate `AGENT_STORAGE_KEY` once with `openssl rand -base64 32`, and keep it in
-   a secret manager or external environment. Back up this key, the `keys/` directory
-   and PostgreSQL together. Losing the key makes stored memory unreadable; replacing
-   it is not a key-rotation procedure.
-4. Export `OPENAI_API_KEY`, `OPENAI_MODEL`, `AGENT_STORAGE_KEY`, `INSTANTLY_API_URL`
+3. Generate `AGENT_IDENTITY_KEY` once with `openssl rand -base64 32`, and keep it in
+   a secret manager or external environment. It protects only private identity files
+   in `keys/`; PostgreSQL conversation data does not require an encryption key.
+   Back up the key and identity files together. Replacing the key is not a key-rotation
+   procedure. Existing installations must reuse their previous key value.
+4. Export `OPENAI_API_KEY`, `OPENAI_MODEL`, `AGENT_IDENTITY_KEY`, `INSTANTLY_API_URL`
    and the DB settings from `.env.example`. Spring does not automatically load
    `.env`. Model selection is explicit: use a Responses-compatible model available
    in your OpenAI API project. A ChatGPT subscription is separate from API access.
@@ -92,10 +93,12 @@ permissions. Compose starts only the separate local PostgreSQL instance on port 
   the service never silently resets an account's crypto identity.
 - Input text, original wire payload and a pending reply job commit in one transaction
   **before** `delivery.ack`. Redelivered message IDs cannot create duplicate jobs.
-- Conversation memory is scoped by character and conversation. Text, summaries,
-  prepared replies and outgoing frames are encrypted at rest with AES-256-GCM and
-  row/field-bound associated data. Routing metadata and peer public keys are visible
-  in PostgreSQL. The service decrypts text to send it to OpenAI for inference.
+- Conversation memory is scoped by character and conversation. Message text,
+  summaries, prepared replies and serialized wire frames are stored as plain `TEXT`
+  in PostgreSQL, without an additional application encryption layer. Wire frames
+  still contain the end-to-end `encryptedEnvelope` needed for delivery and exact
+  retries. Database access controls, TLS, disk and backup encryption are infrastructure
+  responsibilities. The service supplies decrypted message text to OpenAI for inference.
 - Workers lease jobs using `FOR UPDATE SKIP LOCKED`. Jobs in a conversation run in
   order; stale workers cannot overwrite a newer lease. Expired leases are recovered.
 - The generated reply and exact outgoing frame are persisted before transmission.
@@ -109,6 +112,27 @@ permissions. Compose starts only the separate local PostgreSQL instance on port 
   monitoring retention. See the [OpenAI data controls](https://developers.openai.com/api/docs/guides/your-data).
 
 ## Operations and current boundaries
+
+### Upgrade from encrypted database storage
+
+Liquibase change set `002-plaintext-conversation-storage` converts the original
+`BYTEA` columns to `TEXT`. The original migration is unchanged. Stop the old runtime
+and retain a database backup before upgrading. If encrypted rows exist, export the
+**original `AGENT_STORAGE_KEY`** for this one-time conversion; do not generate a new
+value. Set `AGENT_IDENTITY_KEY` to the same value to preserve access to identity files.
+For compatibility, `AGENT_STORAGE_KEY` also remains a fallback for identity files
+when `AGENT_IDENTITY_KEY` is unset.
+
+The migration decrypts existing history, summaries, replies and frames inside one
+transaction, preserving message IDs, nulls and exact frame strings. Missing keys or
+invalid ciphertext abort the transaction. An active old runtime also blocks the
+conversion. Empty databases migrate without a data key. After successful conversion,
+normal database reads and writes have no cipher dependency. The old database key
+is still needed to recover pre-upgrade encrypted backups; identity files continue
+to need their identity key. Rolling back to the encrypted application requires
+restoring the pre-upgrade database backup.
+
+### Runtime scope
 
 The first release supports incoming **text replies**. Proactive DMs, instant posts,
 media, typing simulation, per-user opt-outs beyond backend blocks, automated
@@ -139,7 +163,8 @@ Treat changes to character IDs/account bindings as a migration, not configuratio
 ## Verification
 
 `./mvnw verify` requires Docker and fails if PostgreSQL integration tests cannot run.
-It covers roster constraints, hexagonal dependency rules, encrypted storage,
+It covers roster constraints, hexagonal dependency rules, plaintext database storage,
+legacy encrypted-data migration and rollback on failure, encrypted identity files,
 CryptoKit interoperability, key persistence, duplicate input, transaction rollback,
 conversation isolation, concurrent leasing, lease recovery, Responses request
 format, and a local HTTP/WebSocket backend with a deliberately lost send acceptance.

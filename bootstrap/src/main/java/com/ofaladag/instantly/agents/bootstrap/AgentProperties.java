@@ -11,7 +11,7 @@ public record AgentProperties(
         URI backendUrl,
         Path accountsFile,
         Path keyDirectory,
-        String storageKey,
+        String identityKey,
         String model,
         String openaiApiKey,
         int concurrency,

@@ -69,7 +69,7 @@ class RealtimeIntegrationTest {
     void repliesThroughEncryptedSocketAndRecoversLostAcceptanceWithoutDuplicateGeneration()
             throws Exception {
         var cipher = new StorageCipher(Base64.getEncoder().encodeToString(new byte[32]));
-        var store = new JdbcAgentStore(jdbc, new TransactionTemplate(transactions), cipher, 8);
+        var store = new JdbcAgentStore(jdbc, new TransactionTemplate(transactions), 8);
         var peers = new JdbcPeerKeyStore(jdbc);
         var catalog = new MarkdownCharacterCatalog("classpath*:characters/*.md");
         var modelCalls = new AtomicInteger();
@@ -368,8 +368,8 @@ class RealtimeIntegrationTest {
                             boolean persisted =
                                     jdbc.queryForObject(
                                                             "SELECT count(*) FROM"
-                                                                + " agent.chat_message WHERE"
-                                                                + " message_id=?",
+                                                                    + " agent.chat_message WHERE"
+                                                                    + " message_id=?",
                                                             Long.class,
                                                             message)
                                                     == 1

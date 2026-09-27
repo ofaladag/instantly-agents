@@ -38,7 +38,7 @@ public class AgentConfiguration {
     @ConditionalOnProperty(name = "agents.enabled", havingValue = "true")
     static class EnabledRuntime {
         @Bean
-        StorageCipher storageCipher(AgentProperties p) {
+        StorageCipher identityCipher(AgentProperties p) {
             if (p.concurrency() < 1
                     || p.concurrency() > 32
                     || p.maxAttempts() < 1
@@ -46,16 +46,12 @@ public class AgentConfiguration {
                     || p.replyDelaySeconds() < 0
                     || p.replyDelaySeconds() > 3600)
                 throw new IllegalArgumentException("Invalid agent worker configuration");
-            return new StorageCipher(p.storageKey());
+            return new StorageCipher(p.identityKey());
         }
 
         @Bean
-        AgentStore agentStore(
-                JdbcTemplate jdbc,
-                PlatformTransactionManager tx,
-                StorageCipher cipher,
-                AgentProperties p) {
-            return new JdbcAgentStore(jdbc, new TransactionTemplate(tx), cipher, p.maxAttempts());
+        AgentStore agentStore(JdbcTemplate jdbc, PlatformTransactionManager tx, AgentProperties p) {
+            return new JdbcAgentStore(jdbc, new TransactionTemplate(tx), p.maxAttempts());
         }
 
         @Bean

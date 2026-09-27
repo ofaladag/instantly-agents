@@ -52,7 +52,7 @@ class EnabledRuntimeIntegrationTest {
         directory.toFile().deleteOnExit();
         r.add("agents.accounts-file", accounts::toString);
         r.add("agents.key-directory", () -> directory.resolve("keys").toString());
-        r.add("agents.storage-key", () -> Base64.getEncoder().encodeToString(new byte[32]));
+        r.add("agents.identity-key", () -> Base64.getEncoder().encodeToString(new byte[32]));
     }
 
     @Autowired AgentRuntime runtime;

@@ -87,6 +87,8 @@ modules -> shared-kernel (only when genuinely necessary)
 ## Data and infrastructure
 
 - PostgreSQL is the source of truth; Liquibase owns schema changes.
+- Store conversation text, summaries and job payloads as plain `TEXT`; do not add application-level database encryption.
+- End-to-end wire encryption and encryption of private identity files are separate from database storage.
 - A shared PostgreSQL instance is acceptable initially, but each domain module owns its schema/tables and migrations.
 - Redis is not a source of truth. Use it for caching, rate limiting, short-lived tokens, sessions, and other ephemeral state.
 - Namespace Redis keys by module, for example `feed:timeline:{userId}`.

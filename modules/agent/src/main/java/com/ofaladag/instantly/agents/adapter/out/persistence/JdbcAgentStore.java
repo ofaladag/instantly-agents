@@ -1,6 +1,5 @@
 package com.ofaladag.instantly.agents.adapter.out.persistence;
 
-import com.ofaladag.instantly.agents.adapter.out.crypto.StorageCipher;
 import com.ofaladag.instantly.agents.application.port.out.AgentStore;
 import com.ofaladag.instantly.agents.domain.Chat;
 
@@ -19,7 +18,6 @@ import java.util.*;
 public final class JdbcAgentStore implements AgentStore {
     private final JdbcTemplate jdbc;
     private final TransactionTemplate transactions;
-    private final StorageCipher cipher;
     private final int maxAttempts;
 
     @Override
@@ -28,7 +26,7 @@ public final class JdbcAgentStore implements AgentStore {
                 _ -> {
                     jdbc.update(
                             "INSERT INTO agent.agent_account(character_id,member_id,backend_url)"
-                                + " VALUES (?,?,?) ON CONFLICT(character_id) DO NOTHING",
+                                    + " VALUES (?,?,?) ON CONFLICT(character_id) DO NOTHING",
                             character,
                             member,
                             backend);
@@ -36,7 +34,7 @@ public final class JdbcAgentStore implements AgentStore {
                             Boolean.TRUE.equals(
                                     jdbc.queryForObject(
                                             "SELECT member_id=? AND backend_url=? FROM"
-                                                + " agent.agent_account WHERE character_id=?",
+                                                    + " agent.agent_account WHERE character_id=?",
                                             Boolean.class,
                                             member,
                                             backend,
@@ -51,7 +49,7 @@ public final class JdbcAgentStore implements AgentStore {
                 _ -> {
                     jdbc.update(
                             "INSERT INTO agent.conversation(character_id,conversation_id) VALUES"
-                                + " (?,?) ON CONFLICT DO NOTHING",
+                                    + " (?,?) ON CONFLICT DO NOTHING",
                             m.characterId(),
                             m.conversationId());
                     int inserted =
@@ -64,20 +62,8 @@ public final class JdbcAgentStore implements AgentStore {
                                     m.conversationId(),
                                     m.messageId(),
                                     m.sequence(),
-                                    cipher.encrypt(
-                                            m.text(),
-                                            messageKey(
-                                                    m.characterId(),
-                                                    m.conversationId(),
-                                                    m.messageId(),
-                                                    "content")),
-                                    cipher.encrypt(
-                                            m.wirePayload(),
-                                            messageKey(
-                                                    m.characterId(),
-                                                    m.conversationId(),
-                                                    m.messageId(),
-                                                    "wire")));
+                                    m.text(),
+                                    m.wirePayload());
                     if (inserted == 1)
                         jdbc.update(
                                 """
@@ -143,8 +129,8 @@ public final class JdbcAgentStore implements AgentStore {
                 rs.getLong("position"),
                 rs.getInt("attempts"),
                 rs.getObject("lease_owner", UUID.class),
-                cipher.decrypt(rs.getBytes("reply"), jobKey(id, "reply")),
-                cipher.decrypt(rs.getBytes("outbound_frame"), jobKey(id, "frame")));
+                rs.getString("reply"),
+                rs.getString("outbound_frame"));
     }
 
     @Override
@@ -155,12 +141,10 @@ public final class JdbcAgentStore implements AgentStore {
                     var summary =
                             jdbc.queryForObject(
                                     "SELECT summary,summary_through FROM agent.conversation WHERE"
-                                        + " character_id=? AND conversation_id=?",
+                                            + " character_id=? AND conversation_id=?",
                                     (rs, _) ->
                                             new Chat.Context(
-                                                    cipher.decrypt(rs.getBytes(1), summaryKey(job)),
-                                                    rs.getLong(2),
-                                                    List.of()),
+                                                    rs.getString(1), rs.getLong(2), List.of()),
                                     job.characterId(),
                                     job.conversationId());
                     var messages =
@@ -176,15 +160,7 @@ public final class JdbcAgentStore implements AgentStore {
                                                     rs.getString("direction").equals("IN")
                                                             ? "user"
                                                             : "assistant",
-                                                    cipher.decrypt(
-                                                            rs.getBytes("content"),
-                                                            messageKey(
-                                                                    job.characterId(),
-                                                                    job.conversationId(),
-                                                                    rs.getObject(
-                                                                            "message_id",
-                                                                            UUID.class),
-                                                                    "content"))),
+                                                    rs.getString("content")),
                                     job.characterId(),
                                     job.conversationId(),
                                     summary.summaryThrough(),
@@ -202,8 +178,8 @@ public final class JdbcAgentStore implements AgentStore {
                     lock(job);
                     jdbc.update(
                             "UPDATE agent.conversation SET summary=?,summary_through=? WHERE"
-                                + " character_id=? AND conversation_id=? AND summary_through<?",
-                            cipher.encrypt(summary, summaryKey(job)),
+                                    + " character_id=? AND conversation_id=? AND summary_through<?",
+                            summary,
                             through,
                             job.characterId(),
                             job.conversationId(),
@@ -213,12 +189,12 @@ public final class JdbcAgentStore implements AgentStore {
 
     @Override
     public void saveReply(Chat.Job job, String text) {
-        update(job, "reply", cipher.encrypt(text, jobKey(job.id(), "reply")));
+        update(job, "reply", text);
     }
 
     @Override
     public void saveFrame(Chat.Job job, String frame) {
-        update(job, "outbound_frame", cipher.encrypt(frame, jobKey(job.id(), "frame")));
+        update(job, "outbound_frame", frame);
     }
 
     @Override
@@ -226,7 +202,7 @@ public final class JdbcAgentStore implements AgentStore {
         update(job, "outbound_frame", null);
     }
 
-    private void update(Chat.Job job, String column, byte[] value) {
+    private void update(Chat.Job job, String column, String value) {
         // Column comes only from the three fixed methods above, never from input.
         check(
                 jdbc.update(
@@ -253,13 +229,7 @@ public final class JdbcAgentStore implements AgentStore {
                             job.conversationId(),
                             messageId,
                             job.position(),
-                            cipher.encrypt(
-                                    text,
-                                    messageKey(
-                                            job.characterId(),
-                                            job.conversationId(),
-                                            messageId,
-                                            "content")));
+                            text);
                     check(
                             jdbc.update(
                                     "UPDATE agent.reply_job SET"
@@ -292,7 +262,7 @@ public final class JdbcAgentStore implements AgentStore {
         var ids =
                 jdbc.queryForList(
                         "SELECT id FROM agent.reply_job WHERE id=? AND state='PROCESSING' AND"
-                            + " lease_owner=? AND lease_until>now() FOR UPDATE",
+                                + " lease_owner=? AND lease_until>now() FOR UPDATE",
                         UUID.class,
                         job.id(),
                         job.leaseOwner());
@@ -301,18 +271,5 @@ public final class JdbcAgentStore implements AgentStore {
 
     private static void check(int count) {
         if (count != 1) throw new Chat.LeaseLost();
-    }
-
-    private static String jobKey(UUID id, String field) {
-        return "job/" + id + "/" + field;
-    }
-
-    private static String summaryKey(Chat.Job j) {
-        return "summary/" + j.characterId() + "/" + j.conversationId();
-    }
-
-    private static String messageKey(
-            String character, UUID conversation, UUID message, String field) {
-        return "message/" + character + "/" + conversation + "/" + message + "/" + field;
     }
 }

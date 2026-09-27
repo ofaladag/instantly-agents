@@ -5,3 +5,10 @@ databaseChangeLog:
       changes:
         - sqlFile:
             path: db/changelog/001-agent-runtime.sql
+  - changeSet:
+      id: 002-plaintext-conversation-storage
+      author: instantly
+      runInTransaction: true
+      changes:
+        - customChange:
+            class: com.ofaladag.instantly.agents.bootstrap.migration.PlaintextConversationStorage

@@ -19,6 +19,7 @@ import javax.sql.DataSource;
 @RequiredArgsConstructor
 @DependsOnDatabaseInitialization
 public final class AgentRuntime implements SmartLifecycle {
+    public static final long LEADERSHIP_LOCK = 84482923044781L;
     private final DataSource dataSource;
     private final InstantlyTransport transport;
     private final ReplyWorkers workers;
@@ -33,7 +34,8 @@ public final class AgentRuntime implements SmartLifecycle {
             leadership = dataSource.getConnection();
             try (var statement = leadership.createStatement();
                     var result =
-                            statement.executeQuery("SELECT pg_try_advisory_lock(84482923044781)")) {
+                            statement.executeQuery(
+                                    "SELECT pg_try_advisory_lock(" + LEADERSHIP_LOCK + ")")) {
                 result.next();
                 if (!result.getBoolean(1))
                     throw new IllegalStateException("Another agent runtime owns this database");
@@ -68,7 +70,7 @@ public final class AgentRuntime implements SmartLifecycle {
         if (leadership != null) {
             try {
                 try (var statement = leadership.createStatement()) {
-                    statement.execute("SELECT pg_advisory_unlock(84482923044781)");
+                    statement.execute("SELECT pg_advisory_unlock(" + LEADERSHIP_LOCK + ")");
                 }
             } catch (SQLException ignored) {
             } finally {

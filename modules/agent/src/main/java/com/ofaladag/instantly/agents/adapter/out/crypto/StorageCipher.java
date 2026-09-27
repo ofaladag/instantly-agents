@@ -10,7 +10,7 @@ import javax.crypto.Cipher;
 import javax.crypto.spec.GCMParameterSpec;
 import javax.crypto.spec.SecretKeySpec;
 
-/** The key lives outside PostgreSQL. Associated data prevents swapping rows or fields. */
+/** Protects identity files and decrypts legacy database values during the one-time migration. */
 public final class StorageCipher {
     private final SecretKeySpec key;
     private final SecureRandom random = new SecureRandom();
@@ -18,7 +18,7 @@ public final class StorageCipher {
     public StorageCipher(String base64Key) {
         byte[] bytes = Base64.getDecoder().decode(base64Key);
         if (bytes.length != 32)
-            throw new IllegalArgumentException("AGENT_STORAGE_KEY must be base64 of 32 bytes");
+            throw new IllegalArgumentException("Encryption key must be base64 of 32 bytes");
         key = new SecretKeySpec(bytes, "AES");
     }
 
