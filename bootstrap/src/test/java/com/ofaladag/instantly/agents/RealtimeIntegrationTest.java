@@ -5,9 +5,9 @@ import static org.awaitility.Awaitility.await;
 
 import com.ofaladag.instantly.agents.adapter.in.internal.ReplyWorkers;
 import com.ofaladag.instantly.agents.adapter.out.backend.*;
-import com.ofaladag.instantly.agents.adapter.out.characters.MarkdownCharacterCatalog;
 import com.ofaladag.instantly.agents.adapter.out.crypto.*;
 import com.ofaladag.instantly.agents.adapter.out.persistence.*;
+import com.ofaladag.instantly.agents.application.port.out.CharacterCatalog;
 import com.ofaladag.instantly.agents.application.port.out.LanguageModel;
 import com.ofaladag.instantly.agents.application.usecase.*;
 import com.ofaladag.instantly.agents.domain.*;
@@ -21,6 +21,7 @@ import org.springframework.boot.test.web.server.LocalServerPort;
 import org.springframework.context.annotation.*;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.*;
+import org.springframework.test.context.jdbc.Sql;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
 import org.springframework.web.bind.annotation.*;
@@ -63,15 +64,16 @@ class RealtimeIntegrationTest {
     @Autowired PlatformTransactionManager transactions;
     @Autowired JsonMapper json;
     @Autowired FakeApi backend;
+    @Autowired CharacterCatalog catalog;
     @TempDir Path keys;
 
     @Test
+    @Sql("classpath:db/seed/initial-agents.sql")
     void repliesThroughEncryptedSocketAndRecoversLostAcceptanceWithoutDuplicateGeneration()
             throws Exception {
         var cipher = new StorageCipher(Base64.getEncoder().encodeToString(new byte[32]));
         var store = new JdbcAgentStore(jdbc, new TransactionTemplate(transactions), 8);
         var peers = new JdbcPeerKeyStore(jdbc);
-        var catalog = new MarkdownCharacterCatalog("classpath*:characters/*.md");
         var modelCalls = new AtomicInteger();
         LanguageModel model =
                 new LanguageModel() {
@@ -89,7 +91,13 @@ class RealtimeIntegrationTest {
                     }
                 };
         try (var http = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(5)).build()) {
-            var account = new AccountConfig("aylin-izmir", "test-agent", "local-test-password");
+            jdbc.update(
+                    "UPDATE agent.agent_account SET username=?,password=?,enabled=true WHERE"
+                        + " character_id=?",
+                    "test-agent",
+                    "local-test-password",
+                    "aylin-izmir");
+            var account = new JdbcAgentAccounts(jdbc).enabled().getFirst();
             var client =
                     new InstantlyAccountClient(
                             URI.create("http://127.0.0.1:" + port),

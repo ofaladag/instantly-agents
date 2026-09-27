@@ -23,7 +23,6 @@ management:
 agents:
   enabled: ${AGENTS_ENABLED:false}
   backend-url: ${INSTANTLY_API_URL:http://localhost:8080}
-  accounts-file: ${AGENT_ACCOUNTS_FILE:./secrets/accounts.json}
   key-directory: ${AGENT_KEY_DIRECTORY:./keys}
   identity-key: ${AGENT_IDENTITY_KEY:}
   model: ${OPENAI_MODEL:}
@@ -31,4 +30,3 @@ agents:
   concurrency: ${AGENT_REPLY_CONCURRENCY:4}
   max-attempts: ${AGENT_MAX_ATTEMPTS:8}
   reply-delay-seconds: ${AGENT_REPLY_DELAY_SECONDS:3}
-  character-location: classpath*:characters/*.md

@@ -8,7 +8,9 @@ import com.ofaladag.instantly.agents.domain.Chat;
 import org.junit.jupiter.api.*;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.core.io.ClassPathResource;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.jdbc.datasource.init.ScriptUtils;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.transaction.PlatformTransactionManager;
@@ -38,8 +40,12 @@ class PersistenceIntegrationTest {
     JdbcAgentStore store;
 
     @BeforeEach
-    void setup() {
-        jdbc.execute("TRUNCATE agent.agent_account CASCADE");
+    void setup() throws Exception {
+        jdbc.execute("TRUNCATE agent.character_profile CASCADE");
+        try (var connection = jdbc.getDataSource().getConnection()) {
+            ScriptUtils.executeSqlScript(
+                    connection, new ClassPathResource("db/seed/initial-agents.sql"));
+        }
         store = new JdbcAgentStore(jdbc, new TransactionTemplate(transactions), 8);
         store.bind("aylin-izmir", UUID.randomUUID(), "http://localhost:8080");
     }

@@ -25,16 +25,17 @@ public final class JdbcAgentStore implements AgentStore {
         transactions.executeWithoutResult(
                 _ -> {
                     jdbc.update(
-                            "INSERT INTO agent.agent_account(character_id,member_id,backend_url)"
-                                    + " VALUES (?,?,?) ON CONFLICT(character_id) DO NOTHING",
-                            character,
+                            "UPDATE agent.agent_account SET member_id=?,backend_url=?"
+                                    + " WHERE character_id=? AND member_id IS NULL",
                             member,
-                            backend);
+                            backend,
+                            character);
                     boolean matches =
                             Boolean.TRUE.equals(
                                     jdbc.queryForObject(
-                                            "SELECT member_id=? AND backend_url=? FROM"
-                                                    + " agent.agent_account WHERE character_id=?",
+                                            "SELECT EXISTS(SELECT 1 FROM agent.agent_account WHERE"
+                                                + " member_id=? AND backend_url=? AND"
+                                                + " character_id=?)",
                                             Boolean.class,
                                             member,
                                             backend,

@@ -1,9 +1,26 @@
 CREATE SCHEMA IF NOT EXISTS agent;
+CREATE TABLE agent.character_profile (
+    id VARCHAR(64) PRIMARY KEY CHECK(id ~ '^[a-z][a-z0-9-]{2,63}$'),
+    name TEXT NOT NULL CHECK(btrim(name) <> ''),
+    gender VARCHAR(6) NOT NULL CHECK(gender IN ('female','male')),
+    age INT NOT NULL CHECK(age BETWEEN 20 AND CASE WHEN gender='female' THEN 35 ELSE 30 END),
+    country TEXT NOT NULL CHECK(btrim(country) <> ''),
+    city TEXT NOT NULL CHECK(btrim(city) <> ''),
+    native_language TEXT NOT NULL CHECK(btrim(native_language) <> ''),
+    timezone TEXT NOT NULL CHECK(btrim(timezone) <> ''),
+    occupation TEXT NOT NULL CHECK(btrim(occupation) <> ''),
+    interests TEXT[] NOT NULL CHECK(cardinality(interests) >= 3 AND array_position(interests, NULL) IS NULL),
+    persona TEXT NOT NULL CHECK(btrim(persona) <> '')
+);
 CREATE TABLE agent.agent_account (
-    character_id VARCHAR(64) PRIMARY KEY,
-    member_id UUID NOT NULL UNIQUE,
-    backend_url TEXT NOT NULL,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    character_id VARCHAR(64) PRIMARY KEY REFERENCES agent.character_profile(id),
+    username VARCHAR(30) NOT NULL UNIQUE CHECK(username ~ '^[a-z0-9_.-]{3,30}$'),
+    password TEXT NOT NULL CHECK(length(password) >= 16 AND octet_length(password) <= 72 AND btrim(password) <> ''),
+    enabled BOOLEAN NOT NULL DEFAULT false,
+    member_id UUID UNIQUE,
+    backend_url TEXT,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    CHECK((member_id IS NULL) = (backend_url IS NULL))
 );
 CREATE TABLE agent.conversation (
     character_id VARCHAR(64) NOT NULL REFERENCES agent.agent_account(character_id),

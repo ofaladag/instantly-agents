@@ -5,18 +5,25 @@ import static org.mockito.Mockito.*;
 
 import com.ofaladag.instantly.agents.adapter.in.internal.ReplyWorkers;
 import com.ofaladag.instantly.agents.adapter.out.backend.InstantlyTransport;
+import com.ofaladag.instantly.agents.adapter.out.persistence.JdbcAgentAccounts;
+import com.ofaladag.instantly.agents.application.port.out.AgentAccounts;
 import com.ofaladag.instantly.agents.bootstrap.AgentRuntime;
 
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.sql.init.dependency.DependsOnDatabaseInitialization;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.test.context.TestConfiguration;
+import org.springframework.context.annotation.*;
+import org.springframework.core.io.ClassPathResource;
+import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.jdbc.datasource.init.ScriptUtils;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.testcontainers.junit.jupiter.*;
 import org.testcontainers.postgresql.PostgreSQLContainer;
 
 import java.nio.file.*;
-import java.nio.file.attribute.PosixFilePermissions;
 import java.util.Base64;
 
 import javax.sql.DataSource;
@@ -30,6 +37,7 @@ import javax.sql.DataSource;
             "agents.openai-api-key=local-test-only"
         })
 @Testcontainers
+@Import(EnabledRuntimeIntegrationTest.SeedConfiguration.class)
 class EnabledRuntimeIntegrationTest {
     @Container
     static final PostgreSQLContainer POSTGRES = new PostgreSQLContainer("postgres:18.3-alpine");
@@ -40,27 +48,35 @@ class EnabledRuntimeIntegrationTest {
         r.add("spring.datasource.username", POSTGRES::getUsername);
         r.add("spring.datasource.password", POSTGRES::getPassword);
         Path directory = Files.createTempDirectory("agents-enabled-test-");
-        Path accounts =
-                Files.createFile(
-                        directory.resolve("accounts.json"),
-                        PosixFilePermissions.asFileAttribute(
-                                PosixFilePermissions.fromString("rw-------")));
-        Files.writeString(
-                accounts,
-                "[{\"characterId\":\"aylin-izmir\",\"username\":\"local-test\",\"password\":\"local-test\"}]");
-        accounts.toFile().deleteOnExit();
         directory.toFile().deleteOnExit();
-        r.add("agents.accounts-file", accounts::toString);
         r.add("agents.key-directory", () -> directory.resolve("keys").toString());
         r.add("agents.identity-key", () -> Base64.getEncoder().encodeToString(new byte[32]));
     }
 
     @Autowired AgentRuntime runtime;
     @Autowired DataSource dataSource;
+    @Autowired InstantlyTransport configuredTransport;
+
+    @TestConfiguration(proxyBeanMethods = false)
+    static class SeedConfiguration {
+        @Bean
+        @Primary
+        @DependsOnDatabaseInitialization
+        AgentAccounts seededAccounts(JdbcTemplate jdbc) throws Exception {
+            try (var connection = jdbc.getDataSource().getConnection()) {
+                ScriptUtils.executeSqlScript(
+                        connection, new ClassPathResource("db/seed/initial-agents.sql"));
+            }
+            jdbc.update(
+                    "UPDATE agent.agent_account SET enabled=true WHERE character_id='aylin-izmir'");
+            return new JdbcAgentAccounts(jdbc);
+        }
+    }
 
     @Test
     void enabledWiringStartsAndRejectsSecondRuntimeBeforeAnyAccountLogin() {
         assertThat(runtime.isRunning()).isTrue();
+        assertThat(configuredTransport.configuredCount()).isEqualTo(1);
         var transport = mock(InstantlyTransport.class);
         var workers = mock(ReplyWorkers.class);
         var second = new AgentRuntime(dataSource, transport, workers);
