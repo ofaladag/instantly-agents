@@ -25,7 +25,7 @@ agents:
   backend-url: ${INSTANTLY_API_URL:http://localhost:8080}
   accounts-file: ${AGENT_ACCOUNTS_FILE:./secrets/accounts.json}
   key-directory: ${AGENT_KEY_DIRECTORY:./keys}
-  identity-key: ${AGENT_IDENTITY_KEY:${AGENT_STORAGE_KEY:}}
+  identity-key: ${AGENT_IDENTITY_KEY:}
   model: ${OPENAI_MODEL:}
   openai-api-key: ${OPENAI_API_KEY:}
   concurrency: ${AGENT_REPLY_CONCURRENCY:4}

@@ -19,7 +19,7 @@ import javax.sql.DataSource;
 @RequiredArgsConstructor
 @DependsOnDatabaseInitialization
 public final class AgentRuntime implements SmartLifecycle {
-    public static final long LEADERSHIP_LOCK = 84482923044781L;
+    private static final long LEADERSHIP_LOCK = 84482923044781L;
     private final DataSource dataSource;
     private final InstantlyTransport transport;
     private final ReplyWorkers workers;

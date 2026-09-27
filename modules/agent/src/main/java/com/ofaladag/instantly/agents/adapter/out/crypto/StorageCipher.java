@@ -10,7 +10,7 @@ import javax.crypto.Cipher;
 import javax.crypto.spec.GCMParameterSpec;
 import javax.crypto.spec.SecretKeySpec;
 
-/** Protects identity files and decrypts legacy database values during the one-time migration. */
+/** Protects private identity files outside PostgreSQL. */
 public final class StorageCipher {
     private final SecretKeySpec key;
     private final SecureRandom random = new SecureRandom();

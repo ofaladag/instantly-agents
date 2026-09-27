@@ -8,7 +8,7 @@ CREATE TABLE agent.agent_account (
 CREATE TABLE agent.conversation (
     character_id VARCHAR(64) NOT NULL REFERENCES agent.agent_account(character_id),
     conversation_id UUID NOT NULL,
-    summary BYTEA,
+    summary TEXT,
     summary_through BIGINT NOT NULL DEFAULT 0,
     PRIMARY KEY(character_id, conversation_id)
 );
@@ -18,8 +18,8 @@ CREATE TABLE agent.chat_message (
     message_id UUID NOT NULL,
     position BIGINT NOT NULL CHECK(position > 0),
     direction VARCHAR(3) NOT NULL CHECK(direction IN ('IN','OUT')),
-    content BYTEA NOT NULL,
-    wire_payload BYTEA,
+    content TEXT NOT NULL,
+    wire_payload TEXT,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     PRIMARY KEY(character_id, message_id),
     UNIQUE(character_id, conversation_id, position, direction),
@@ -36,8 +36,8 @@ CREATE TABLE agent.reply_job (
     available_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     lease_owner UUID,
     lease_until TIMESTAMPTZ,
-    reply BYTEA,
-    outbound_frame BYTEA,
+    reply TEXT,
+    outbound_frame TEXT,
     last_error VARCHAR(80),
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     completed_at TIMESTAMPTZ,

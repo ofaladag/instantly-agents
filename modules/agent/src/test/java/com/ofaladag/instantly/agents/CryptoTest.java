@@ -17,7 +17,7 @@ import java.util.*;
 
 class CryptoTest {
     @TempDir Path directory;
-    private static final String STORAGE_KEY = Base64.getEncoder().encodeToString(new byte[32]);
+    private static final String IDENTITY_KEY = Base64.getEncoder().encodeToString(new byte[32]);
 
     @Test
     void decryptsIndependentAppleCryptoKitFixture() throws Exception {
@@ -93,17 +93,18 @@ class CryptoTest {
     }
 
     @Test
-    void storageCipherBindsRowsAndKeysSurviveRestart() throws Exception {
-        var cipher = new StorageCipher(STORAGE_KEY);
-        byte[] encrypted = cipher.encrypt("private text", "message/alice");
-        assertThat(new String(encrypted, StandardCharsets.UTF_8)).doesNotContain("private text");
-        assertThat(cipher.decrypt(encrypted, "message/alice")).isEqualTo("private text");
-        assertThatThrownBy(() -> cipher.decrypt(encrypted, "message/bob"))
+    void identityCipherBindsCharactersAndKeysSurviveRestart() throws Exception {
+        var cipher = new StorageCipher(IDENTITY_KEY);
+        byte[] encrypted = cipher.encrypt("private identity", "identity/aylin-izmir");
+        assertThat(new String(encrypted, StandardCharsets.UTF_8))
+                .doesNotContain("private identity");
+        assertThat(cipher.decrypt(encrypted, "identity/aylin-izmir")).isEqualTo("private identity");
+        assertThatThrownBy(() -> cipher.decrypt(encrypted, "identity/deniz-izmir"))
                 .isInstanceOf(IllegalStateException.class);
         var store = new IdentityKeyStore(directory, cipher, new JsonMapper());
         var first = store.load("aylin-izmir", true);
         var second =
-                new IdentityKeyStore(directory, new StorageCipher(STORAGE_KEY), new JsonMapper())
+                new IdentityKeyStore(directory, new StorageCipher(IDENTITY_KEY), new JsonMapper())
                         .load("aylin-izmir", false);
         assertThat(first.fingerprint()).isEqualTo(second.fingerprint());
         assertThat(first.encryption().getPrivate().getEncoded())

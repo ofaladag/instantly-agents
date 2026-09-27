@@ -62,6 +62,19 @@ class PersistenceIntegrationTest {
                                         + " id='001-agent-runtime'",
                                 Long.class))
                 .isEqualTo(1);
+        assertThat(
+                        jdbc.queryForList(
+                                """
+                                SELECT data_type FROM information_schema.columns
+                                WHERE table_schema='agent' AND (table_name, column_name) IN (
+                                    ('conversation', 'summary'),
+                                    ('chat_message', 'content'),
+                                    ('chat_message', 'wire_payload'),
+                                    ('reply_job', 'reply'),
+                                    ('reply_job', 'outbound_frame'))
+                                """,
+                                String.class))
+                .containsExactly("text", "text", "text", "text", "text");
         var input = incoming(UUID.randomUUID(), 1);
         store.receive(input, Duration.ZERO);
         store.receive(input, Duration.ZERO);

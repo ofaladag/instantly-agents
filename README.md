@@ -66,7 +66,7 @@ To activate selected characters:
    a secret manager or external environment. It protects only private identity files
    in `keys/`; PostgreSQL conversation data does not require an encryption key.
    Back up the key and identity files together. Replacing the key is not a key-rotation
-   procedure. Existing installations must reuse their previous key value.
+   procedure.
 4. Export `OPENAI_API_KEY`, `OPENAI_MODEL`, `AGENT_IDENTITY_KEY`, `INSTANTLY_API_URL`
    and the DB settings from `.env.example`. Spring does not automatically load
    `.env`. Model selection is explicit: use a Responses-compatible model available
@@ -113,27 +113,6 @@ permissions. Compose starts only the separate local PostgreSQL instance on port 
 
 ## Operations and current boundaries
 
-### Upgrade from encrypted database storage
-
-Liquibase change set `002-plaintext-conversation-storage` converts the original
-`BYTEA` columns to `TEXT`. The original migration is unchanged. Stop the old runtime
-and retain a database backup before upgrading. If encrypted rows exist, export the
-**original `AGENT_STORAGE_KEY`** for this one-time conversion; do not generate a new
-value. Set `AGENT_IDENTITY_KEY` to the same value to preserve access to identity files.
-For compatibility, `AGENT_STORAGE_KEY` also remains a fallback for identity files
-when `AGENT_IDENTITY_KEY` is unset.
-
-The migration decrypts existing history, summaries, replies and frames inside one
-transaction, preserving message IDs, nulls and exact frame strings. Missing keys or
-invalid ciphertext abort the transaction. An active old runtime also blocks the
-conversion. Empty databases migrate without a data key. After successful conversion,
-normal database reads and writes have no cipher dependency. The old database key
-is still needed to recover pre-upgrade encrypted backups; identity files continue
-to need their identity key. Rolling back to the encrypted application requires
-restoring the pre-upgrade database backup.
-
-### Runtime scope
-
 The first release supports incoming **text replies**. Proactive DMs, instant posts,
 media, typing simulation, per-user opt-outs beyond backend blocks, automated
 retention/deletion workflows and multi-instance account sharding are later work.
@@ -164,10 +143,9 @@ Treat changes to character IDs/account bindings as a migration, not configuratio
 
 `./mvnw verify` requires Docker and fails if PostgreSQL integration tests cannot run.
 It covers roster constraints, hexagonal dependency rules, plaintext database storage,
-legacy encrypted-data migration and rollback on failure, encrypted identity files,
-CryptoKit interoperability, key persistence, duplicate input, transaction rollback,
-conversation isolation, concurrent leasing, lease recovery, Responses request
-format, and a local HTTP/WebSocket backend with a deliberately lost send acceptance.
+encrypted identity files, CryptoKit interoperability, key persistence, duplicate
+input, transaction rollback, conversation isolation, concurrent leasing, lease recovery,
+Responses request format, and a local HTTP/WebSocket backend with a deliberately lost send acceptance.
 The tests use a fake model/backend and do not contact OpenAI or production users.
 
 The independent Apple fixture can be regenerated on macOS:
