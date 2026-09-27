@@ -1,0 +1,34 @@
+spring:
+  application:
+    name: instantly-agents
+  datasource:
+    url: ${AGENTS_DATABASE_URL:jdbc:postgresql://localhost:5433/instantly_agents}
+    username: ${AGENTS_DATABASE_USERNAME:agents}
+    password: ${AGENTS_DATABASE_PASSWORD:agents-local}
+    hikari:
+      maximum-pool-size: 12
+  liquibase:
+    change-log: classpath:db/changelog/master.yaml
+server:
+  address: ${SERVER_ADDRESS:127.0.0.1}
+  port: ${PORT:8081}
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      show-details: never
+agents:
+  enabled: ${AGENTS_ENABLED:false}
+  backend-url: ${INSTANTLY_API_URL:http://localhost:8080}
+  accounts-file: ${AGENT_ACCOUNTS_FILE:./secrets/accounts.json}
+  key-directory: ${AGENT_KEY_DIRECTORY:./keys}
+  identity-key: ${AGENT_IDENTITY_KEY:}
+  model: ${OPENAI_MODEL:}
+  openai-api-key: ${OPENAI_API_KEY:}
+  concurrency: ${AGENT_REPLY_CONCURRENCY:4}
+  max-attempts: ${AGENT_MAX_ATTEMPTS:8}
+  reply-delay-seconds: ${AGENT_REPLY_DELAY_SECONDS:3}
+  character-location: classpath*:characters/*.md
