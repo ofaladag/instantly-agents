@@ -1,12 +1,12 @@
 # Instantly Agents
 
 Java 26 / Spring Boot 4.1 service for Instantly's fictional adult profiles. Each
-configured backend account has one stable Markdown character. The first release
+configured backend account has one character stored in PostgreSQL. The first release
 receives encrypted text messages, saves conversation memory in its own PostgreSQL,
 generates character-consistent replies through OpenAI Responses, and sends them
 through the existing Instantly WebSocket API.
 
-The catalog contains **30 women aged 20–35 and 20 men aged 20–30**, from Türkiye and
+The initial SQL seed contains **30 women aged 20–35 and 20 men aged 20–30**, from Türkiye and
 Europe. All characters can respond in the other person's language. The shared
 social policy allows mild, receptive adult flirting without sexual content.
 
@@ -22,10 +22,10 @@ modules/agent/
   application/port/out/            storage, model, catalog and transport contracts
   application/usecase/             conversation and reply orchestration
   adapter/in/internal/             background workers
-  adapter/out/                     JDBC, Markdown, OpenAI, HTTP/WebSocket, crypto
-  src/main/resources/characters/   50 individually versioned character files
+  adapter/out/                     JDBC, OpenAI, HTTP/WebSocket, crypto
   src/main/resources/prompts/      shared, iterative social policy
-  src/main/resources/db/           module-owned schema migration
+  src/main/resources/db/changelog/ module-owned schema migration
+  src/main/resources/db/seed/      manually applied initial character/account DML
 ```
 
 There is one agent domain module and no empty BFF/shared kernel. PostgreSQL is the
@@ -49,19 +49,46 @@ docker compose up -d postgres
 java -jar bootstrap/target/bootstrap-0.1.0-SNAPSHOT.jar
 ```
 
-By default `AGENTS_ENABLED=false`: migrations, catalog validation and the local
+By default `AGENTS_ENABLED=false`: migrations and the local
 health endpoint run, with **no account logins or model calls**.
+An empty catalog is valid in this mode so the schema can be created before seeding.
 Health: `http://127.0.0.1:8081/actuator/health`.
 
-To activate selected characters:
+## Initial characters and accounts
+
+After Liquibase creates the schema, run the standalone DML against the **agents
+database**. The application does not automatically run it:
+
+```sh
+psql -h localhost -p 5433 -U agents -d instantly_agents -v ON_ERROR_STOP=1 \
+  -f modules/agent/src/main/resources/db/seed/initial-agents.sql
+```
+
+`agent.character_profile` holds the name, gender, age, location, native language,
+timezone, occupation, interests and complete persona for each character.
+`agent.agent_account` holds its unique username, plaintext password and `enabled`
+flag. The script generates usernames such as `ai_aylin_izmir` and a distinct random
+36-character password per new account using PostgreSQL's built-in `gen_random_uuid()`;
+it needs no extension. Credentials are generated when the SQL runs, not embedded
+in source files. All 50 accounts start disabled. Re-running the DML inserts missing
+records without replacing existing personas, passwords, activation states or bindings.
+
+Read the generated credentials to provision matching backend AI accounts:
+
+```sql
+SELECT character_id, username, password
+FROM agent.agent_account ORDER BY character_id;
+```
+
+To activate selected characters after seeding:
 
 1. Deploy the backend agent-login support and set its `AGENT_LOGIN_ENABLED=true`.
    Provision AI accounts using the backend's trusted `scripts/create-ai-profile.py`
-   process. The agent service does not create accounts or promote human profiles.
-2. Copy `accounts.example.json` to `secrets/accounts.json`, set permission `0600`,
-   and fill in real provisioned credentials. Each entry maps a unique character ID
-   to a unique account. Include only accounts you intend to activate; the catalog
-   does not automatically create or activate all 50 accounts.
+   process with the exact usernames/passwords from the query above. The agent service
+   does not create backend accounts or promote human profiles.
+2. Set `enabled=true` on the corresponding `agent.agent_account` rows only after
+   those accounts exist in the backend, for example:
+   `UPDATE agent.agent_account SET enabled=true WHERE character_id='aylin-izmir';`
 3. Generate `AGENT_IDENTITY_KEY` once with `openssl rand -base64 32`, and keep it in
    a secret manager or external environment. It protects only private identity files
    in `keys/`; PostgreSQL conversation data does not require an encryption key.
@@ -71,18 +98,29 @@ To activate selected characters:
    and the DB settings from `.env.example`. Spring does not automatically load
    `.env`. Model selection is explicit: use a Responses-compatible model available
    in your OpenAI API project. A ChatGPT subscription is separate from API access.
-5. Set `AGENTS_ENABLED=true` and run the jar. Start with a test account and test
-   conversations to evaluate character behavior before activating the full roster.
+5. Set `AGENTS_ENABLED=true` and restart the service. At least one account must be
+   enabled in the database. Start with a test account and test conversations to
+   evaluate character behavior before activating the full roster.
+
+Character edits in PostgreSQL apply to the next newly generated reply. Account
+credentials and activation flags are loaded at startup, so restart after changing
+them. On the first successful login, the service fills `member_id` and `backend_url`
+and refuses later logins that would bind the same character to a different identity.
+Only the shared social policy remains a code resource; there are no character
+Markdown files or JSON credential files to synchronize.
 
 Remote backend URLs require HTTPS; HTTP is allowed only on loopback for development.
 The server binds loopback by default. The Docker image uses an unprivileged UID
-10001; mount its credential file and key directory with compatible ownership and
+10001; mount its key directory with compatible ownership and
 permissions. Compose starts only the separate local PostgreSQL instance on port 5433.
 
 ## Message durability and privacy
 
 - Authentication uses `/api/v1/auth/agents/login`; refresh-token rotation is
   serialized per account. Tokens remain in memory. Profile `isAi` is checked at login.
+- Character definitions and agent usernames/passwords are stored directly in PostgreSQL,
+  with no application encryption or password hashing in this service. Credentials
+  are excluded from application logs and object string representations.
 - A database advisory lock enforces **one active runtime per agents database**.
   Configure only one deployment/database for a set of backend accounts. Do not log
   these accounts into a mobile app or another worker: backend delivery ACKs remove
@@ -142,7 +180,8 @@ Treat changes to character IDs/account bindings as a migration, not configuratio
 ## Verification
 
 `./mvnw verify` requires Docker and fails if PostgreSQL integration tests cannot run.
-It covers roster constraints, hexagonal dependency rules, plaintext database storage,
+It covers initial DML execution and safe re-runs, roster constraints, database-loaded
+credentials and personas, hexagonal dependency rules, plaintext database storage,
 encrypted identity files, CryptoKit interoperability, key persistence, duplicate
 input, transaction rollback, conversation isolation, concurrent leasing, lease recovery,
 Responses request format, and a local HTTP/WebSocket backend with a deliberately lost send acceptance.

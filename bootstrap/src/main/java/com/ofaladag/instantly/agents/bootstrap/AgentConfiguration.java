@@ -2,7 +2,6 @@ package com.ofaladag.instantly.agents.bootstrap;
 
 import com.ofaladag.instantly.agents.adapter.in.internal.ReplyWorkers;
 import com.ofaladag.instantly.agents.adapter.out.backend.*;
-import com.ofaladag.instantly.agents.adapter.out.characters.MarkdownCharacterCatalog;
 import com.ofaladag.instantly.agents.adapter.out.crypto.*;
 import com.ofaladag.instantly.agents.adapter.out.openai.OpenAiLanguageModel;
 import com.ofaladag.instantly.agents.adapter.out.persistence.*;
@@ -15,14 +14,18 @@ import com.openai.client.okhttp.OpenAIOkHttpClient;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.health.contributor.Health;
 import org.springframework.boot.health.contributor.HealthIndicator;
+import org.springframework.boot.sql.init.dependency.DependsOnDatabaseInitialization;
 import org.springframework.context.annotation.*;
+import org.springframework.core.io.ClassPathResource;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
 
 import tools.jackson.databind.json.JsonMapper;
 
+import java.io.IOException;
 import java.net.http.HttpClient;
+import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 
 import javax.sql.DataSource;
@@ -30,13 +33,21 @@ import javax.sql.DataSource;
 @Configuration(proxyBeanMethods = false)
 public class AgentConfiguration {
     @Bean
-    CharacterCatalog characters(AgentProperties properties) {
-        return new MarkdownCharacterCatalog(properties.characterLocation());
+    CharacterCatalog characters(JdbcTemplate jdbc) throws IOException {
+        return new JdbcCharacterCatalog(
+                jdbc,
+                new ClassPathResource("prompts/social-policy.md")
+                        .getContentAsString(StandardCharsets.UTF_8));
     }
 
     @Configuration(proxyBeanMethods = false)
     @ConditionalOnProperty(name = "agents.enabled", havingValue = "true")
     static class EnabledRuntime {
+        @Bean
+        AgentAccounts agentAccounts(JdbcTemplate jdbc) {
+            return new JdbcAgentAccounts(jdbc);
+        }
+
         @Bean
         StorageCipher identityCipher(AgentProperties p) {
             if (p.concurrency() < 1
@@ -96,17 +107,22 @@ public class AgentConfiguration {
         }
 
         @Bean
+        @DependsOnDatabaseInitialization
         InstantlyTransport transport(
                 AgentProperties p,
                 HttpClient http,
                 JsonMapper json,
                 CharacterCatalog catalog,
+                AgentAccounts accounts,
                 AgentStore store,
                 PeerKeyStore peers,
                 IdentityKeyStore keys,
                 ReceiveMessageUseCase receiver) {
+            var configured = accounts.enabled();
+            if (configured.isEmpty()) throw new IllegalStateException("no_enabled_agent_accounts");
+            configured.forEach(account -> catalog.get(account.characterId()));
             var clients =
-                    AccountConfig.load(p.accountsFile(), json, catalog).stream()
+                    configured.stream()
                             .map(
                                     account ->
                                             new InstantlyAccountClient(

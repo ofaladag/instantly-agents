@@ -2,6 +2,7 @@ package com.ofaladag.instantly.agents.adapter.out.backend;
 
 import com.ofaladag.instantly.agents.adapter.out.crypto.*;
 import com.ofaladag.instantly.agents.application.port.out.*;
+import com.ofaladag.instantly.agents.domain.AgentAccount;
 import com.ofaladag.instantly.agents.domain.Chat;
 
 import tools.jackson.databind.JsonNode;
@@ -16,7 +17,7 @@ import java.util.*;
 /** One synchronized rotating authentication session per account. Never logs response bodies. */
 public final class InstantlyAccountClient {
     private final URI base;
-    private final AccountConfig account;
+    private final AgentAccount account;
     private final HttpClient http;
     private final JsonMapper json;
     private final AgentStore store;
@@ -31,7 +32,7 @@ public final class InstantlyAccountClient {
 
     public InstantlyAccountClient(
             URI base,
-            AccountConfig account,
+            AgentAccount account,
             HttpClient http,
             JsonMapper json,
             AgentStore store,

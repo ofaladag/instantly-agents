@@ -1,14 +1,17 @@
 package com.ofaladag.instantly.agents;
 
 import static org.assertj.core.api.Assertions.*;
+import static org.mockito.Mockito.*;
 
-import com.ofaladag.instantly.agents.adapter.out.characters.MarkdownCharacterCatalog;
 import com.ofaladag.instantly.agents.adapter.out.openai.OpenAiLanguageModel;
+import com.ofaladag.instantly.agents.application.port.out.CharacterCatalog;
+import com.ofaladag.instantly.agents.domain.CharacterProfile;
 import com.ofaladag.instantly.agents.domain.Chat;
 import com.openai.client.okhttp.OpenAIOkHttpClient;
 import com.sun.net.httpserver.HttpServer;
 
 import org.junit.jupiter.api.Test;
+import org.springframework.core.io.ClassPathResource;
 
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
@@ -52,7 +55,25 @@ class OpenAiLanguageModelTest {
                         .timeout(Duration.ofSeconds(5))
                         .build();
         try {
-            var catalog = new MarkdownCharacterCatalog("classpath*:characters/*.md");
+            var catalog = mock(CharacterCatalog.class);
+            var profile =
+                    new CharacterProfile(
+                            "aylin-izmir",
+                            "Aylin",
+                            "female",
+                            27,
+                            "Türkiye",
+                            "İzmir",
+                            "tr",
+                            "Europe/Istanbul",
+                            "ceramic artist",
+                            List.of("pottery", "coastal walks", "indie films"),
+                            "Warm and observant.");
+            when(catalog.get("aylin-izmir")).thenReturn(profile);
+            when(catalog.commonInstructions())
+                    .thenReturn(
+                            new ClassPathResource("prompts/social-policy.md")
+                                    .getContentAsString(StandardCharsets.UTF_8));
             var model = new OpenAiLanguageModel(client, "test-model", catalog);
             var context =
                     new Chat.Context(

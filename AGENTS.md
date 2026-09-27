@@ -87,6 +87,8 @@ modules -> shared-kernel (only when genuinely necessary)
 ## Data and infrastructure
 
 - PostgreSQL is the source of truth; Liquibase owns schema changes.
+- Characters and agent login credentials live in PostgreSQL. Keep the initial DML separate from automatic schema migrations; do not reintroduce character or credential file loaders.
+- Store agent usernames/passwords as plaintext as requested. Seed new accounts disabled and generate their passwords when the DML runs. Never log credentials.
 - Store conversation text, summaries and job payloads as plain `TEXT`; do not add application-level database encryption.
 - End-to-end wire encryption and encryption of private identity files are separate from database storage.
 - A shared PostgreSQL instance is acceptable initially, but each domain module owns its schema/tables and migrations.
